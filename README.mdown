@@ -1,0 +1,7 @@
+
+External Dependencies
+---------------------
+* Python 2.6
+* MySQL
+* [CVSAnalY](https://github.com/SoftwareIntrospectionLab/cvsanaly/tree/develop), which depends on [repositoryhandler](https://github.com/SoftwareIntrospectionLab/repositoryhandler/tree/develop) and [guilty](https://github.com/SoftwareIntrospectionLab/guilty)
+* [src2srcml](http://www.sdml.info/projects/srcml/trunk/) 
