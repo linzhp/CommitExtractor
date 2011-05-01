@@ -9,7 +9,7 @@ public class Extractor {
 	 * @throws InstantiationException
 	 * @throws SQLException
 	 */
-	public static void main(String[] args) throws SQLException{
+	public static void main(String[] args) throws Exception{
 		Connection conn = DatabaseManager.getConnection();
 		Statement stmt = conn.createStatement();
 
