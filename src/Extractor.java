@@ -1,5 +1,7 @@
 import java.sql.*;
 
+import org.evolizer.changedistiller.model.classifiers.ChangeType;
+
 public class Extractor {
 
 	/**
@@ -15,9 +17,14 @@ public class Extractor {
 
 		// Create table
 		stmt.executeUpdate("drop table if exists features");
-		stmt.executeUpdate("create table features("
+		String createTable = "create table features("
 				+ "id int primary key auto_increment,"
-				+ "commit_id int not null unique" + ")");
+				+ "commit_id int not null unique";
+		for(ChangeType ct:ChangeType.values()){
+			createTable+=","+ct.toString()+" int default 0";
+		}
+		createTable += ")";
+		stmt.executeUpdate(createTable);
 		ResultSet commitRS = stmt.executeQuery("select id "
 				+ "from scmlog s where s.repository_id=3 limit 10");// FIXME
 		while (commitRS.next()) {
