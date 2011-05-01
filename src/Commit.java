@@ -1,5 +1,6 @@
 import java.io.IOException;
 import java.sql.*;
+import java.util.HashMap;
 import java.util.List;
 import java.util.logging.*;
 
@@ -10,6 +11,7 @@ public class Commit {
 	private int filesCopied = 0;
 	private int id;
 	private Logger logger;
+	public HashMap<String, Integer> categorizedChanges = new HashMap<String, Integer>();
 
 	public int getID() {
 		return id;
@@ -69,7 +71,13 @@ public class Commit {
 		distiller.performDistilling(oldFile, newFile);
 		List<SourceCodeChange> changes = distiller.getSourceCodeChanges();
 		for (SourceCodeChange c : changes) {
-			System.out.println(c.getLabel());
+			String category = c.getLabel();
+			Integer count = categorizedChanges.get(category);
+			if(count == null){
+				count = 0;
+			}
+			count++;
+			categorizedChanges.put(category, count);
 		}
 	}
 

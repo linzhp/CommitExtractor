@@ -46,6 +46,13 @@ public class Extractor {
 				case 'V': commit.processRename();break;
 				}
 			}
+			StringBuffer attrs = new StringBuffer("insert into features(commit_id");
+			StringBuffer values = new StringBuffer("values("+commit.getID());
+			for(String category:commit.categorizedChanges.keySet()){
+				attrs.append(","+category);
+				values.append(","+commit.categorizedChanges.get(category));
+			}
+			stmt1.executeUpdate(attrs.append(")").append(values).append(")").toString());
 		}
 		conn.close();
 	}
