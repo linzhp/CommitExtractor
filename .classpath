@@ -8,7 +8,6 @@
 	<classpathentry kind="lib" path="lib/org.eclipse.core.runtime_3.6.0.v20100505.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.equinox.common_3.6.0.v20100503.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.core.resources_3.6.1.R36x_v20110131-1630.jar"/>
-	<classpathentry kind="lib" path="/usr/local/eclipse/plugins/org.eclipse.core.jobs_3.5.1.R36x_v20100824.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.ui.workbench_3.6.2.M20110210-1200.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.osgi_3.6.2.R36x_v20110210.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.jface_3.6.2.M20110210-1200.jar"/>
@@ -21,6 +20,7 @@
 	<classpathentry kind="lib" path="lib/org.eclipse.ui.editors_3.6.1.r361_v20100825-0800.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.ui.workbench.texteditor_3.6.1.r361_v20100714-0800.jar"/>
 	<classpathentry kind="lib" path="lib/commons-lang-2.4.jar"/>
+	<classpathentry kind="lib" path="lib/org.eclipse.core.jobs_3.5.1.R36x_v20100824.jar"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/changedistiller"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

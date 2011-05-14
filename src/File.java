@@ -25,7 +25,6 @@ import org.eclipse.core.runtime.jobs.ISchedulingRule;
 
 
 public class File implements IFile {
-	private InputStream content;
 	private String contentString;
 	
 	public String getContentString() {
@@ -503,7 +502,6 @@ public class File implements IFile {
 	@Override
 	public void create(InputStream is, boolean b, IProgressMonitor pm)
 			throws CoreException {
-		content = is;
 	}
 
 	@Override

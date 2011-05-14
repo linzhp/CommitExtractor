@@ -1,4 +1,3 @@
-import java.io.IOException;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.List;
@@ -19,18 +18,7 @@ public class Commit {
 
 	public Commit(int commitID) {
 		this.id = commitID;
-		logger = Logger.getLogger(this.getClass().getName());
-		FileHandler fh;
-		try {
-			fh = new FileHandler("extractor.log");
-			fh.setFormatter(new SimpleFormatter());
-			logger.addHandler(fh);
-		} catch (SecurityException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		logger.setLevel(Level.CONFIG);
+		logger = MyLogger.getLogger();
 	}
 
 	public int getFilesCopied() {
@@ -42,6 +30,18 @@ public class Commit {
 	}
 
 	public void processModify(int fileID) throws Exception {
+		String newContent = getNewContent(fileID);
+		if(newContent == null){
+			return;
+		}
+		String oldContent = getOldContent(fileID);
+		if(oldContent == null){
+			return;
+		}
+		extractDiff(oldContent, newContent, fileID);
+	}
+
+	private String getNewContent(int fileID) throws Exception {
 		Connection conn = DatabaseManager.getConnection();
 		Statement stmt = conn.createStatement();
 		String query = "select content from content where file_id=" + fileID
@@ -51,18 +51,27 @@ public class Commit {
 		if (!rs.next()) {
 			logger.config("Content for file " + fileID + " at commit_id " + id
 					+ " not found");
-			return;
+			return "";
+		}else{
+			return rs.getString("content");
 		}
-		String newContent = rs.getString("content");
-		rs = stmt.executeQuery("select content "
-				+ "from content where file_id=" + fileID + " and commit_id<"
-				+ this.id + " order by commit_id desc limit 1");
-		if (!rs.next()) {
-			logger.config("No content for previous version of " + fileID
-					+ " at commit_id " + id + " found");
-			return;
-		}
-		String oldContent = rs.getString("content");
+	}
+
+	public void processDelete(int fileID) throws Exception {
+		String oldContent = getOldContent(fileID);
+		extractDiff(oldContent, "", fileID);
+	}
+
+	public void processAdd(int fileID) throws Exception{
+		String newContent = getNewContent(fileID);
+		extractDiff("", newContent, fileID);
+	}
+
+	public void processRename(int fileID) throws Exception {
+		processModify(fileID);
+	}
+	
+	private void extractDiff(String oldContent, String newContent, int fileID) {
 		Distiller distiller = new Distiller();
 		File newFile = new File();
 		File oldFile = new File();
@@ -70,26 +79,33 @@ public class Commit {
 		oldFile.setContentString(oldContent);
 		distiller.performDistilling(oldFile, newFile);
 		List<SourceCodeChange> changes = distiller.getSourceCodeChanges();
-		for (SourceCodeChange c : changes) {
-			String category = c.getLabel();
-			Integer count = categorizedChanges.get(category);
-			if(count == null){
-				count = 0;
-			}
-			count++;
-			categorizedChanges.put(category, count);
+		if(changes==null){
+			logger.config("No diff of file "+fileID+" at commit "+id+" found");
+		}else{
+			for (SourceCodeChange c : changes) {
+				String category = c.getLabel();
+				Integer count = categorizedChanges.get(category);
+				if(count == null){
+					count = 0;
+				}
+				count++;
+				categorizedChanges.put(category, count);
+			}			
+		}		
+	}
+	
+	private String getOldContent(int fileID) throws Exception{
+		Connection conn = DatabaseManager.getConnection();
+		Statement stmt = conn.createStatement();
+		ResultSet rs = stmt.executeQuery("select content "
+				+ "from content where file_id=" + fileID + " and commit_id<"
+				+ this.id + " order by commit_id desc limit 1");
+		if (!rs.next()) {
+			logger.config("No content for previous version of " + fileID
+					+ " at commit_id " + id + " found");
+			return null;
+		}else{
+			return rs.getString("content");
 		}
-	}
-
-	public void processDelete() {
-
-	}
-
-	public void processAdd() {
-
-	}
-
-	public void processRename() {
-
 	}
 }
