@@ -21,6 +21,6 @@
 	<classpathentry kind="lib" path="lib/org.eclipse.ui.workbench.texteditor_3.6.1.r361_v20100714-0800.jar"/>
 	<classpathentry kind="lib" path="lib/commons-lang-2.4.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.core.jobs_3.5.1.R36x_v20100824.jar"/>
-	<classpathentry combineaccessrules="false" kind="src" path="/changedistiller"/>
+	<classpathentry kind="lib" path="lib/ChangeDistiller.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

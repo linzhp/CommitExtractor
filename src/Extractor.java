@@ -19,9 +19,9 @@ public class Extractor {
 		Statement stmt = conn.createStatement();
 
 		// Create table
-		stmt.executeUpdate("drop table if exists features");
-		String createTable = "create table features("
-				+ "id int primary key auto_increment,"
+//		stmt.executeUpdate("drop table if exists features");
+		String createTable = "create table if not exists features("
+				+ "id integer primary key auto_increment,"
 				+ "commit_id int not null unique," +
 						"buggy bool default false," +
 						"file_copied int default 0," +
@@ -37,8 +37,9 @@ public class Extractor {
 		stmt.executeUpdate(createTable);
 		Properties prop = new Properties();
 		prop.load(new FileInputStream("config.properties"));
+		String repoID=prop.getProperty("RepositoryID");
 		ResultSet commitRS = stmt.executeQuery("select id, author_id, date, length(message) as log_length "
-				+ "from scmlog s where s.repository_id=3 limit 10");
+				+ "from scmlog s where s.repository_id="+repoID);
 		while (commitRS.next()) {
 			Commit commit = new Commit(commitRS.getInt(1));
 			Statement stmt1 = conn.createStatement();

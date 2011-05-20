@@ -31,13 +31,7 @@ public class Commit {
 
 	public void processModify(int fileID) throws Exception {
 		String newContent = getNewContent(fileID);
-		if(newContent == null){
-			return;
-		}
 		String oldContent = getOldContent(fileID);
-		if(oldContent == null){
-			return;
-		}
 		extractDiff(oldContent, newContent, fileID);
 	}
 
@@ -51,7 +45,7 @@ public class Commit {
 		if (!rs.next()) {
 			logger.config("Content for file " + fileID + " at commit_id " + id
 					+ " not found");
-			return "";
+			return null;
 		}else{
 			return rs.getString("content");
 		}
@@ -72,6 +66,12 @@ public class Commit {
 	}
 	
 	private void extractDiff(String oldContent, String newContent, int fileID) {
+		if(newContent == null){
+			return;
+		}
+		if(oldContent == null){
+			return;
+		}
 		Distiller distiller = new Distiller();
 		File newFile = new File();
 		File oldFile = new File();
