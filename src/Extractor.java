@@ -1,11 +1,19 @@
 import java.io.FileInputStream;
 import java.sql.*;
 import java.util.Calendar;
+import java.util.HashSet;
 import java.util.Properties;
 
 import org.evolizer.changedistiller.model.classifiers.ChangeType;
 
+import weka.core.Attribute;
+import weka.core.FastVector;
+import weka.core.Instance;
+import weka.core.Instances;
+
 public class Extractor {
+
+	private static int numOfAttrs;
 
 	/**
 	 * @param args
@@ -34,14 +42,29 @@ public class Extractor {
 			createTable+=","+ct.toString()+" int default 0";
 		}
 		createTable += ")";
-		stmt.executeUpdate(createTable);
+//		stmt.executeUpdate(createTable);
+		
 		Properties prop = new Properties();
 		prop.load(new FileInputStream("config.properties"));
 		String repoID=prop.getProperty("RepositoryID");
-		ResultSet commitRS = stmt.executeQuery("select id, author_id, date, length(message) as log_length "
-				+ "from scmlog s where s.repository_id="+repoID);
+		
+		// Getting all bug commits
+		HashSet<Integer> bugCommits = new HashSet<Integer>();
+		ResultSet bugCommitRS = stmt.executeQuery("select distinct bug_commit_id from" +
+				" hunk_blames where bug_commit_id in " +
+				"(select id from scmlog where repository_id="+repoID+")");
+		while(bugCommitRS.next()){
+			bugCommits.add(bugCommitRS.getInt("bug_commit_id"));
+		}
+		
+		// Fetching commit data
+		ResultSet commitRS = stmt.executeQuery("select s.id, author_id, author_date, length(message) as log_length "
+				+ "from scmlog s where s.repository_id="+repoID+" or s.repository_id=2 limit 10");//TODO remove limit
+		Instances rawData = getInstances();
 		while (commitRS.next()) {
 			Commit commit = new Commit(commitRS.getInt(1));
+			Instance commitInst = new Instance(numOfAttrs);
+			// Generating ASF diff data
 			Statement stmt1 = conn.createStatement();
 			ResultSet file = stmt1
 					.executeQuery("select * " +
@@ -59,8 +82,9 @@ public class Extractor {
 				case 'V': commit.processRename(fileID);break;
 				}
 			}
+			// Getting commit meta data
 			int authorID = commitRS.getInt("author_id");
-			Timestamp date = commitRS.getTimestamp("date");
+			Timestamp date = commitRS.getTimestamp("author_date");
 			Calendar cal = Calendar.getInstance();
 			cal.setTime(date);
 			int hour = cal.get(Calendar.HOUR_OF_DAY);
@@ -82,19 +106,62 @@ public class Extractor {
 					changedLOC += newEndLine - newStartLine;
 				}
 			}
-			
+			// Storing data
 			StringBuffer attrs = new StringBuffer("insert into features(" +
 					"commit_id, file_copied, author_id, commit_hour, commit_day, log_length, changed_LOC");
 			StringBuffer values = new StringBuffer("values("+
 					commit.getID()+","+commit.getFilesCopied()+","+authorID+","+hour+","+
 					day+","+commitRS.getInt("log_length")+","+changedLOC);
-			for(String category:commit.categorizedChanges.keySet()){
+			if(bugCommits.contains(commit.getID()))
+				commitInst.setValue(rawData.attribute("buggy"), 1);
+			else
+				commitInst.setValue(rawData.attribute("buggy"), 0);
+			commitInst.setValue(rawData.attribute("files_copied"), commit.getFilesCopied());
+			commitInst.setValue(rawData.attribute("author_id"), authorID);
+			commitInst.setValue(rawData.attribute("commit_hour"), hour);
+			commitInst.setValue(rawData.attribute("commit_day"), day);
+			commitInst.setValue(rawData.attribute("log_length"), commitRS.getInt("log_length"));
+			commitInst.setValue(rawData.attribute("changed_LOC"), changedLOC);
+
+			for(ChangeType ct:ChangeType.values()){
+				String category = ct.toString();
+				Integer count = commit.categorizedChanges.get(category);
+				if(count == null)
+					count = 0;
 				attrs.append(","+category);
-				values.append(","+commit.categorizedChanges.get(category));
+				values.append(","+count);
+				commitInst.setValue(rawData.attribute(category), count);
 			}
-			stmt1.executeUpdate(attrs.append(")").append(values).append(")").toString());
+			rawData.add(commitInst);
+			//stmt1.executeUpdate(attrs.append(")").append(values).append(")").toString());
 		}
 		conn.close();
+		System.out.println(rawData);
 	}
 
+	public static Instances getInstances(){
+		// Defining ARFF schema
+		FastVector attrs = new FastVector();
+		Attribute buggy = new Attribute("buggy");
+		attrs.addElement(buggy);
+		attrs.addElement(new Attribute("files_copied"));
+		attrs.addElement(new Attribute("author_id"));
+		attrs.addElement(new Attribute("commit_hour"));
+		attrs.addElement(new Attribute("commit_day"));
+		attrs.addElement(new Attribute("log_length"));
+		attrs.addElement(new Attribute("changed_LOC"));
+		
+//		attrs.addElement(new Attribute("added_delta", (FastVector)null));
+//		attrs.addElement(new Attribute("deleted_delta", (FastVector)null));
+//		attrs.addElement(new Attribute("new_source", (FastVector)null));
+
+		// AST diff features
+		for(ChangeType ct:ChangeType.values()){
+			attrs.addElement(new Attribute(ct.toString()));
+		}
+		numOfAttrs = attrs.size();
+		Instances inst = new Instances("Raw", attrs, 0);
+		inst.setClass(buggy);
+		return inst;
+	}
 }

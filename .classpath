@@ -2,7 +2,6 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.6"/>
-	<classpathentry kind="lib" path="lib/mysql-connector-java-5.1.13-bin.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.core.filesystem_1.3.1.R36x_v20100727-0745.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.core.filesystem.linux.x86_1.4.0.v20100505-1235.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.core.runtime_3.6.0.v20100505.jar"/>
@@ -21,6 +20,8 @@
 	<classpathentry kind="lib" path="lib/org.eclipse.ui.workbench.texteditor_3.6.1.r361_v20100714-0800.jar"/>
 	<classpathentry kind="lib" path="lib/commons-lang-2.4.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.core.jobs_3.5.1.R36x_v20100824.jar"/>
-	<classpathentry kind="lib" path="lib/ChangeDistiller.jar"/>
+	<classpathentry kind="lib" path="lib/weka.jar" sourcepath="/opt/weka-3-6-5/weka-src.jar"/>
+	<classpathentry kind="lib" path="lib/mysql-connector-java-3.1.14-bin.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/changedistiller"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

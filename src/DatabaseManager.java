@@ -63,7 +63,7 @@ public class DatabaseManager {
 
     public static Connection getConnection() {
         if (dbManager == null) {
-            dbManager = new DatabaseManager("config.properties");
+            dbManager = new DatabaseManager("config.properties.sample");
         }
         return dbManager.conn;
     }
