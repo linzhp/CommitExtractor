@@ -10,10 +10,11 @@ import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
 import weka.core.Instances;
+import weka.filters.Filter;
+import weka.filters.unsupervised.attribute.NumericToNominal;
 
 public class Extractor {
 
-	private static int numOfAttrs;
 
 	/**
 	 * @param args
@@ -26,23 +27,6 @@ public class Extractor {
 		Connection conn = DatabaseManager.getConnection();
 		Statement stmt = conn.createStatement();
 
-		// Create table
-//		stmt.executeUpdate("drop table if exists features");
-		String createTable = "create table if not exists features("
-				+ "id integer primary key auto_increment,"
-				+ "commit_id int not null unique," +
-						"buggy bool default false," +
-						"file_copied int default 0," +
-						"author_id int," +
-						"commit_hour int," +
-						"commit_day int," +
-						"log_length int default 0," +
-						"changed_LOC int default 0";
-		for(ChangeType ct:ChangeType.values()){
-			createTable+=","+ct.toString()+" int default 0";
-		}
-		createTable += ")";
-//		stmt.executeUpdate(createTable);
 		
 		Properties prop = new Properties();
 		prop.load(new FileInputStream("config.properties"));
@@ -61,9 +45,12 @@ public class Extractor {
 		ResultSet commitRS = stmt.executeQuery("select s.id, author_id, author_date, length(message) as log_length "
 				+ "from scmlog s where s.repository_id="+repoID+" or s.repository_id=2 limit 10");//TODO remove limit
 		Instances rawData = getInstances();
+		Attribute authorIDAttr = rawData.attribute("author_id");
+		Attribute commitHourAttr = rawData.attribute("commit_hour");
+		Attribute commitDayAttr = rawData.attribute("commit_day");
 		while (commitRS.next()) {
 			Commit commit = new Commit(commitRS.getInt(1));
-			Instance commitInst = new Instance(numOfAttrs);
+			Instance commitInst = new Instance(rawData.numAttributes());
 			// Generating ASF diff data
 			Statement stmt1 = conn.createStatement();
 			ResultSet file = stmt1
@@ -106,20 +93,14 @@ public class Extractor {
 					changedLOC += newEndLine - newStartLine;
 				}
 			}
-			// Storing data
-			StringBuffer attrs = new StringBuffer("insert into features(" +
-					"commit_id, file_copied, author_id, commit_hour, commit_day, log_length, changed_LOC");
-			StringBuffer values = new StringBuffer("values("+
-					commit.getID()+","+commit.getFilesCopied()+","+authorID+","+hour+","+
-					day+","+commitRS.getInt("log_length")+","+changedLOC);
 			if(bugCommits.contains(commit.getID()))
 				commitInst.setValue(rawData.attribute("buggy"), 1);
 			else
 				commitInst.setValue(rawData.attribute("buggy"), 0);
 			commitInst.setValue(rawData.attribute("files_copied"), commit.getFilesCopied());
-			commitInst.setValue(rawData.attribute("author_id"), authorID);
-			commitInst.setValue(rawData.attribute("commit_hour"), hour);
-			commitInst.setValue(rawData.attribute("commit_day"), day);
+			commitInst.setValue(authorIDAttr, authorID);
+			commitInst.setValue(commitHourAttr, hour);
+			commitInst.setValue(commitDayAttr, day);
 			commitInst.setValue(rawData.attribute("log_length"), commitRS.getInt("log_length"));
 			commitInst.setValue(rawData.attribute("changed_LOC"), changedLOC);
 
@@ -128,14 +109,25 @@ public class Extractor {
 				Integer count = commit.categorizedChanges.get(category);
 				if(count == null)
 					count = 0;
-				attrs.append(","+category);
-				values.append(","+count);
 				commitInst.setValue(rawData.attribute(category), count);
 			}
 			rawData.add(commitInst);
-			//stmt1.executeUpdate(attrs.append(")").append(values).append(")").toString());
 		}
 		conn.close();
+		// Convert some numeric attributes to nominal
+		NumericToNominal numericToNominal = new NumericToNominal();
+		StringBuilder indices = new StringBuilder();
+		indices.append(rawData.classIndex()+1);
+		indices.append(',');
+		indices.append(authorIDAttr.index()+1);
+		indices.append(',');
+		indices.append(commitHourAttr.index()+1);
+		indices.append(',');
+		indices.append(commitDayAttr.index()+1);
+		String[] options = {"-R",indices.toString()};
+		numericToNominal.setOptions(options);
+		numericToNominal.setInputFormat(rawData);
+		rawData = Filter.useFilter(rawData, numericToNominal);
 		System.out.println(rawData);
 	}
 
@@ -159,7 +151,6 @@ public class Extractor {
 		for(ChangeType ct:ChangeType.values()){
 			attrs.addElement(new Attribute(ct.toString()));
 		}
-		numOfAttrs = attrs.size();
 		Instances inst = new Instances("Raw", attrs, 0);
 		inst.setClass(buggy);
 		return inst;
