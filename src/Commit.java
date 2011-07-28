@@ -35,7 +35,7 @@ public class Commit {
 		extractDiff(oldContent, newContent, fileID);
 	}
 
-	private String getNewContent(int fileID) throws Exception {
+	public String getNewContent(int fileID) throws Exception {
 		Connection conn = DatabaseManager.getConnection();
 		Statement stmt = conn.createStatement();
 		String query = "select content from content where file_id=" + fileID

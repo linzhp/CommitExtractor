@@ -1,3 +1,4 @@
+import java.io.File;
 import java.io.FileInputStream;
 import java.sql.*;
 import java.util.Calendar;
@@ -6,12 +7,15 @@ import java.util.Properties;
 
 import org.evolizer.changedistiller.model.classifiers.ChangeType;
 
+import weka.BOWPlusTokenizer;
 import weka.core.Attribute;
 import weka.core.FastVector;
 import weka.core.Instance;
 import weka.core.Instances;
+import weka.core.converters.ArffSaver;
 import weka.filters.Filter;
 import weka.filters.unsupervised.attribute.NumericToNominal;
+import weka.filters.unsupervised.attribute.StringToWordVector;
 
 public class Extractor {
 
@@ -48,6 +52,9 @@ public class Extractor {
 		Attribute authorIDAttr = rawData.attribute("author_id");
 		Attribute commitHourAttr = rawData.attribute("commit_hour");
 		Attribute commitDayAttr = rawData.attribute("commit_day");
+		Attribute newSourceAttr = rawData.attribute("new_source");
+		Attribute addedDeltaAttr = rawData.attribute("added_delta");
+		Attribute deletedDeltaAttr = rawData.attribute("deleted_delta");
 		while (commitRS.next()) {
 			Commit commit = new Commit(commitRS.getInt(1));
 			Instance commitInst = new Instance(rawData.numAttributes());
@@ -58,6 +65,7 @@ public class Extractor {
 							"from action_files af join files f on af.file_id=f.id " +
 							"where commit_id="+commit.getID() +
 							" and f.file_name like '%.java'");
+			StringBuilder newSource = new StringBuilder();
 			while (file.next()) {
 				char action_type = file.getString("action_type").charAt(0);
 				int fileID = file.getInt("file_id");
@@ -68,7 +76,14 @@ public class Extractor {
 				case 'A': commit.processAdd(fileID); break;
 				case 'V': commit.processRename(fileID);break;
 				}
+				newSource.append(commit.getNewContent(fileID));
 			}
+			//Getting source code delta
+			ResultSet rs = stmt1.executeQuery("select patch from patches where commit_id="+commit.getID());
+			rs.next();
+			String patch = rs.getString(1);
+			String addedDelta = extractDelta(patch, '+');
+			String deletedDelta = extractDelta(patch, '-');
 			// Getting commit meta data
 			int authorID = commitRS.getInt("author_id");
 			Timestamp date = commitRS.getTimestamp("author_date");
@@ -93,6 +108,7 @@ public class Extractor {
 					changedLOC += newEndLine - newStartLine;
 				}
 			}
+			// Constructing commit instance
 			if(bugCommits.contains(commit.getID()))
 				commitInst.setValue(rawData.attribute("buggy"), 1);
 			else
@@ -103,6 +119,10 @@ public class Extractor {
 			commitInst.setValue(commitDayAttr, day);
 			commitInst.setValue(rawData.attribute("log_length"), commitRS.getInt("log_length"));
 			commitInst.setValue(rawData.attribute("changed_LOC"), changedLOC);
+			
+			commitInst.setValue(newSourceAttr, newSource.toString());
+			commitInst.setValue(addedDeltaAttr, addedDelta);
+			commitInst.setValue(deletedDeltaAttr, deletedDelta);
 
 			for(ChangeType ct:ChangeType.values()){
 				String category = ct.toString();
@@ -128,9 +148,41 @@ public class Extractor {
 		numericToNominal.setOptions(options);
 		numericToNominal.setInputFormat(rawData);
 		rawData = Filter.useFilter(rawData, numericToNominal);
-		System.out.println(rawData);
+		
+		rawData = stringToVector(rawData, "new_source");
+		rawData = stringToVector(rawData, "added_delta");
+		rawData = stringToVector(rawData, "deleted_delta");
+		
+		ArffSaver saver = new ArffSaver();
+		saver.setInstances(rawData);
+		saver.setFile(new File("output.arff"));
+		saver.writeBatch();
+//		System.out.println(rawData);
 	}
-
+	
+	public static String extractDelta(String patch, char sign) {
+		String[] lines = patch.split("\n");
+		StringBuilder delta = new StringBuilder();
+		String pattern = "^\\"+sign+"[^\\"+sign+"]+.*";
+		for(String l : lines){
+			if(l.matches(pattern)){
+				delta.append(l.subSequence(1, l.length()));
+				delta.append('\n');
+			}
+		}
+		return delta.toString();
+	}
+	
+	public static Instances stringToVector(Instances rawData, String attr) throws Exception{
+		StringToWordVector stringToWordVector = new StringToWordVector(); 
+		stringToWordVector.setOptions(new String[]{"-R", String.valueOf(rawData.attribute(attr).index()+1), 
+				"-C", "-W", "10000", 
+				"-P", attr,
+				"-tokenizer", BOWPlusTokenizer.class.getName()});
+		stringToWordVector.setInputFormat(rawData);
+		return Filter.useFilter(rawData, stringToWordVector);
+	}
+		
 	public static Instances getInstances(){
 		// Defining ARFF schema
 		FastVector attrs = new FastVector();
@@ -143,9 +195,9 @@ public class Extractor {
 		attrs.addElement(new Attribute("log_length"));
 		attrs.addElement(new Attribute("changed_LOC"));
 		
-//		attrs.addElement(new Attribute("added_delta", (FastVector)null));
-//		attrs.addElement(new Attribute("deleted_delta", (FastVector)null));
-//		attrs.addElement(new Attribute("new_source", (FastVector)null));
+		attrs.addElement(new Attribute("added_delta", (FastVector)null));
+		attrs.addElement(new Attribute("deleted_delta", (FastVector)null));
+		attrs.addElement(new Attribute("new_source", (FastVector)null));
 
 		// AST diff features
 		for(ChangeType ct:ChangeType.values()){
