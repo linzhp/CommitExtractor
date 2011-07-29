@@ -38,6 +38,7 @@ public class BOWPlusTokenizer extends Tokenizer {
 
 	@Override
 	public void tokenize(String s) {
+		System.out.println("String length to be tokenized"+s.length());
 		HashSet<String> javaCOperatorSet = new HashSet<String>(Arrays.asList(javaCOperators));
 		List<String> wordsList = new ArrayList<String>();
 		String splits[] = s.split("[\\W_]+");

@@ -1,24 +1,12 @@
-import java.io.File;
-import java.io.FileInputStream;
+import java.io.*;
 import java.sql.*;
-import java.util.Calendar;
-import java.util.HashSet;
-import java.util.Properties;
+import java.util.*;
 
 import org.evolizer.changedistiller.model.classifiers.ChangeType;
 
-import weka.BOWPlusTokenizer;
-import weka.core.Attribute;
-import weka.core.FastVector;
-import weka.core.Instance;
-import weka.core.Instances;
-import weka.core.converters.ArffSaver;
-import weka.filters.Filter;
-import weka.filters.unsupervised.attribute.NumericToNominal;
-import weka.filters.unsupervised.attribute.StringToWordVector;
-
 public class Extractor {
 
+	private static Map<String, Integer> attrIndex;
 
 	/**
 	 * @param args
@@ -37,35 +25,31 @@ public class Extractor {
 		String repoID=prop.getProperty("RepositoryID");
 		
 		// Getting all bug commits
-		HashSet<Integer> bugCommits = new HashSet<Integer>();
+		Set<Integer> bugCommits = new TreeSet<Integer>();
 		ResultSet bugCommitRS = stmt.executeQuery("select distinct bug_commit_id from" +
-				" hunk_blames where bug_commit_id in " +
+				" hunk_blames "+
+				"where bug_commit_id in " +
 				"(select id from scmlog where repository_id="+repoID+")");
 		while(bugCommitRS.next()){
 			bugCommits.add(bugCommitRS.getInt("bug_commit_id"));
 		}
 		
+		FileWriter fWriter = new FileWriter("output.libsvm", false);
+		
 		// Fetching commit data
-		ResultSet commitRS = stmt.executeQuery("select s.id, author_id, author_date, length(message) as log_length "
-				+ "from scmlog s where s.repository_id="+repoID+" or s.repository_id=2 limit 10");//TODO remove limit
-		Instances rawData = getInstances();
-		Attribute authorIDAttr = rawData.attribute("author_id");
-		Attribute commitHourAttr = rawData.attribute("commit_hour");
-		Attribute commitDayAttr = rawData.attribute("commit_day");
-		Attribute newSourceAttr = rawData.attribute("new_source");
-		Attribute addedDeltaAttr = rawData.attribute("added_delta");
-		Attribute deletedDeltaAttr = rawData.attribute("deleted_delta");
+		ResultSet commitRS = stmt.executeQuery("select s.id as commit_id, length(message) as log_length "
+				+ "from scmlog s"+
+						" where s.repository_id="+repoID);
 		while (commitRS.next()) {
-			Commit commit = new Commit(commitRS.getInt(1));
-			Instance commitInst = new Instance(rawData.numAttributes());
-			// Generating ASF diff data
+			Commit commit = new Commit(commitRS.getInt("commit_id"));
+			// Generating ASF diff data and content term frequency
+			BagOfWords contentBOW = new BagOfWords("new_source");
 			Statement stmt1 = conn.createStatement();
 			ResultSet file = stmt1
 					.executeQuery("select * " +
 							"from action_files af join files f on af.file_id=f.id " +
 							"where commit_id="+commit.getID() +
 							" and f.file_name like '%.java'");
-			StringBuilder newSource = new StringBuilder();
 			while (file.next()) {
 				char action_type = file.getString("action_type").charAt(0);
 				int fileID = file.getInt("file_id");
@@ -76,7 +60,9 @@ public class Extractor {
 				case 'A': commit.processAdd(fileID); break;
 				case 'V': commit.processRename(fileID);break;
 				}
-				newSource.append(commit.getNewContent(fileID));
+				String content = commit.getNewContent(fileID);
+				if(content != null)
+					contentBOW.add(content);
 			}
 			//Getting source code delta
 			ResultSet rs = stmt1.executeQuery("select patch from patches where commit_id="+commit.getID());
@@ -84,14 +70,11 @@ public class Extractor {
 			String patch = rs.getString(1);
 			String addedDelta = extractDelta(patch, '+');
 			String deletedDelta = extractDelta(patch, '-');
-			// Getting commit meta data
-			int authorID = commitRS.getInt("author_id");
-			Timestamp date = commitRS.getTimestamp("author_date");
-			Calendar cal = Calendar.getInstance();
-			cal.setTime(date);
-			int hour = cal.get(Calendar.HOUR_OF_DAY);
-			int day = cal.get(Calendar.DAY_OF_WEEK);
 			
+			BagOfWords aDeltaBOW = new BagOfWords("added_delta"), dDeltaBOW = new BagOfWords("deleted_delta");
+			aDeltaBOW.add(addedDelta);
+			dDeltaBOW.add(deletedDelta);
+			// Getting commit meta data
 			ResultSet hunk = stmt1.executeQuery("select old_start_line, old_end_line, new_start_line, new_end_line" +
 					" from hunks where commit_id="+commit.getID());
 			int changedLOC=0;
@@ -109,55 +92,49 @@ public class Extractor {
 				}
 			}
 			// Constructing commit instance
+			StringBuilder line = new StringBuilder();
 			if(bugCommits.contains(commit.getID()))
-				commitInst.setValue(rawData.attribute("buggy"), 1);
+				line.append(1);
 			else
-				commitInst.setValue(rawData.attribute("buggy"), 0);
-			commitInst.setValue(rawData.attribute("files_copied"), commit.getFilesCopied());
-			commitInst.setValue(authorIDAttr, authorID);
-			commitInst.setValue(commitHourAttr, hour);
-			commitInst.setValue(commitDayAttr, day);
-			commitInst.setValue(rawData.attribute("log_length"), commitRS.getInt("log_length"));
-			commitInst.setValue(rawData.attribute("changed_LOC"), changedLOC);
+				line.append(1);
+			Map<Integer, Integer> features = new TreeMap<Integer, Integer>();
+			features.put(getIndex("files_copied"), commit.getFilesCopied());
+			features.put(getIndex("log_length"), commitRS.getInt("log_length"));
+			features.put(getIndex("changed_LOC"), changedLOC);
 			
-			commitInst.setValue(newSourceAttr, newSource.toString());
-			commitInst.setValue(addedDeltaAttr, addedDelta);
-			commitInst.setValue(deletedDeltaAttr, deletedDelta);
-
+			Map<String, Integer> termFreq = contentBOW.getTermFreq();
+			termFreq.putAll(aDeltaBOW.getTermFreq());
+			termFreq.putAll(dDeltaBOW.getTermFreq());
+			for(String term : termFreq.keySet()){
+				features.put(getIndex(term), termFreq.get(term));
+			}
+			
 			for(ChangeType ct:ChangeType.values()){
 				String category = ct.toString();
 				Integer count = commit.categorizedChanges.get(category);
 				if(count == null)
 					count = 0;
-				commitInst.setValue(rawData.attribute(category), count);
+				features.put(getIndex(category), count);
 			}
-			rawData.add(commitInst);
+			// Sort the indices
+			SortedSet<Integer> indices = new TreeSet<Integer>(features.keySet());
+			
+			for(Integer i : indices){
+				line.append(' ');
+				line.append(i);
+				line.append(':');
+				line.append(features.get(i));
+			}
+			line.append('\n');
+			fWriter.write(line.toString());
 		}
+		fWriter.close();
+		//Log attribute indices
+		fWriter = new FileWriter("attr_indices.log");
+		fWriter.write(attrIndex.toString());
+		fWriter.close();
 		conn.close();
-		// Convert some numeric attributes to nominal
-		NumericToNominal numericToNominal = new NumericToNominal();
-		StringBuilder indices = new StringBuilder();
-		indices.append(rawData.classIndex()+1);
-		indices.append(',');
-		indices.append(authorIDAttr.index()+1);
-		indices.append(',');
-		indices.append(commitHourAttr.index()+1);
-		indices.append(',');
-		indices.append(commitDayAttr.index()+1);
-		String[] options = {"-R",indices.toString()};
-		numericToNominal.setOptions(options);
-		numericToNominal.setInputFormat(rawData);
-		rawData = Filter.useFilter(rawData, numericToNominal);
-		
-		rawData = stringToVector(rawData, "new_source");
-		rawData = stringToVector(rawData, "added_delta");
-		rawData = stringToVector(rawData, "deleted_delta");
-		
-		ArffSaver saver = new ArffSaver();
-		saver.setInstances(rawData);
-		saver.setFile(new File("output.arff"));
-		saver.writeBatch();
-//		System.out.println(rawData);
+
 	}
 	
 	public static String extractDelta(String patch, char sign) {
@@ -173,38 +150,16 @@ public class Extractor {
 		return delta.toString();
 	}
 	
-	public static Instances stringToVector(Instances rawData, String attr) throws Exception{
-		StringToWordVector stringToWordVector = new StringToWordVector(); 
-		stringToWordVector.setOptions(new String[]{"-R", String.valueOf(rawData.attribute(attr).index()+1), 
-				"-C", "-W", "10000", 
-				"-P", attr,
-				"-tokenizer", BOWPlusTokenizer.class.getName()});
-		stringToWordVector.setInputFormat(rawData);
-		return Filter.useFilter(rawData, stringToWordVector);
-	}
-		
-	public static Instances getInstances(){
-		// Defining ARFF schema
-		FastVector attrs = new FastVector();
-		Attribute buggy = new Attribute("buggy");
-		attrs.addElement(buggy);
-		attrs.addElement(new Attribute("files_copied"));
-		attrs.addElement(new Attribute("author_id"));
-		attrs.addElement(new Attribute("commit_hour"));
-		attrs.addElement(new Attribute("commit_day"));
-		attrs.addElement(new Attribute("log_length"));
-		attrs.addElement(new Attribute("changed_LOC"));
-		
-		attrs.addElement(new Attribute("added_delta", (FastVector)null));
-		attrs.addElement(new Attribute("deleted_delta", (FastVector)null));
-		attrs.addElement(new Attribute("new_source", (FastVector)null));
-
-		// AST diff features
-		for(ChangeType ct:ChangeType.values()){
-			attrs.addElement(new Attribute(ct.toString()));
+	public static int getIndex(String attributeName){
+		if(attrIndex == null){
+			attrIndex = new TreeMap<String, Integer>();
 		}
-		Instances inst = new Instances("Raw", attrs, 0);
-		inst.setClass(buggy);
-		return inst;
+		Integer index = attrIndex.get(attributeName);
+		if(index == null){
+			index = attrIndex.size()+1;
+			attrIndex.put(attributeName, index);
+		}
+		return index;
 	}
+	
 }

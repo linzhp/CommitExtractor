@@ -36,6 +36,7 @@ public class Commit {
 	}
 
 	public String getNewContent(int fileID) throws Exception {
+		
 		Connection conn = DatabaseManager.getConnection();
 		Statement stmt = conn.createStatement();
 		String query = "select content from content where file_id=" + fileID
