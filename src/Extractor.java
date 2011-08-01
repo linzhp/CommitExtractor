@@ -29,17 +29,20 @@ public class Extractor {
 		ResultSet bugCommitRS = stmt.executeQuery("select distinct bug_commit_id from" +
 				" hunk_blames "+
 				"where bug_commit_id in " +
-				"(select id from scmlog where repository_id="+repoID+")");
+				"(select id from scmlog where repository_id in("+repoID+"))");
 		while(bugCommitRS.next()){
 			bugCommits.add(bugCommitRS.getInt("bug_commit_id"));
 		}
 		
-		FileWriter fWriter = new FileWriter("output.libsvm", false);
+		String dataFile = prop.getProperty("DataFile");
+		if(dataFile == null)
+			dataFile = "output.libsvm";
+		FileWriter fWriter = new FileWriter(dataFile, false);
 		
 		// Fetching commit data
 		ResultSet commitRS = stmt.executeQuery("select s.id as commit_id, length(message) as log_length "
 				+ "from scmlog s"+
-						" where s.repository_id="+repoID);
+						" where s.repository_id in("+repoID+")");
 		while (commitRS.next()) {
 			Commit commit = new Commit(commitRS.getInt("commit_id"));
 			// Generating ASF diff data and content term frequency
@@ -96,7 +99,7 @@ public class Extractor {
 			if(bugCommits.contains(commit.getID()))
 				line.append(1);
 			else
-				line.append(1);
+				line.append(0);
 			Map<Integer, Integer> features = new TreeMap<Integer, Integer>();
 			features.put(getIndex("files_copied"), commit.getFilesCopied());
 			features.put(getIndex("log_length"), commitRS.getInt("log_length"));
@@ -130,7 +133,10 @@ public class Extractor {
 		}
 		fWriter.close();
 		//Log attribute indices
-		fWriter = new FileWriter("attr_indices.log");
+		String idxFile = prop.getProperty("IndexMappingFile");
+		if(idxFile == null)
+			idxFile = "attr.idx";
+		fWriter = new FileWriter(idxFile);
 		fWriter.write(attrIndex.toString());
 		fWriter.close();
 		conn.close();
