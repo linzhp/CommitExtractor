@@ -43,13 +43,16 @@ public class Commit {
 				+ " and commit_id=" + this.id;
 		logger.fine(query);
 		ResultSet rs = stmt.executeQuery(query);
+		String result;
 		if (!rs.next()) {
 			logger.config("Content for file " + fileID + " at commit_id " + id
 					+ " not found");
-			return null;
+			result = null;
 		}else{
-			return rs.getString("content");
+			result = rs.getString("content");
 		}
+		stmt.close();
+		return result;
 	}
 
 	public void processDelete(int fileID) throws Exception {
@@ -101,12 +104,15 @@ public class Commit {
 		ResultSet rs = stmt.executeQuery("select content "
 				+ "from content where file_id=" + fileID + " and commit_id<"
 				+ this.id + " order by commit_id desc limit 1");
+		String result;
 		if (!rs.next()) {
 			logger.config("No content for previous version of " + fileID
 					+ " at commit_id " + id + " found");
-			return null;
+			result = null;
 		}else{
-			return rs.getString("content");
+			result = rs.getString("content");
 		}
+		stmt.close();
+		return result;
 	}
 }

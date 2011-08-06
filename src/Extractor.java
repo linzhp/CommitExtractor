@@ -33,6 +33,7 @@ public class Extractor {
 		while(bugCommitRS.next()){
 			bugCommits.add(bugCommitRS.getInt("bug_commit_id"));
 		}
+		stmt.close();
 		
 		String dataFile = prop.getProperty("DataFile");
 		if(dataFile == null)
@@ -40,6 +41,7 @@ public class Extractor {
 		FileWriter fWriter = new FileWriter(dataFile, false);
 		
 		// Fetching commit data
+		stmt = conn.createStatement();
 		ResultSet commitRS = stmt.executeQuery("select s.id as commit_id, length(message) as log_length "
 				+ "from scmlog s"+
 						" where s.repository_id in("+repoID+")");
@@ -67,7 +69,10 @@ public class Extractor {
 				if(content != null)
 					contentBOW.add(content);
 			}
+			stmt1.close();
+
 			//Getting source code delta
+			stmt1 = conn.createStatement();
 			ResultSet rs = stmt1.executeQuery("select patch from patches where commit_id="+commit.getID());
 			rs.next();
 			String patch = rs.getString(1);
@@ -77,7 +82,10 @@ public class Extractor {
 			BagOfWords aDeltaBOW = new BagOfWords("added_delta"), dDeltaBOW = new BagOfWords("deleted_delta");
 			aDeltaBOW.add(addedDelta);
 			dDeltaBOW.add(deletedDelta);
+			stmt1.close();
+			
 			// Getting commit meta data
+			stmt1 = conn.createStatement();
 			ResultSet hunk = stmt1.executeQuery("select old_start_line, old_end_line, new_start_line, new_end_line" +
 					" from hunks where commit_id="+commit.getID());
 			int changedLOC=0;
@@ -94,6 +102,7 @@ public class Extractor {
 					changedLOC += newEndLine - newStartLine;
 				}
 			}
+			stmt1.close();
 			// Constructing commit instance
 			StringBuilder line = new StringBuilder();
 			if(bugCommits.contains(commit.getID()))
