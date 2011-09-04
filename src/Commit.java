@@ -31,6 +31,9 @@ public class Commit {
 
 	public void processModify(int fileID) throws Exception {
 		String newContent = getNewContent(fileID);
+		if(newContent == null)
+			logger.warning("Content for file " + fileID + " at commit_id " + id
+					+ " not found");
 		String oldContent = getOldContent(fileID);
 		extractDiff(oldContent, newContent, fileID);
 	}
@@ -45,8 +48,6 @@ public class Commit {
 		ResultSet rs = stmt.executeQuery(query);
 		String result;
 		if (!rs.next()) {
-			logger.config("Content for file " + fileID + " at commit_id " + id
-					+ " not found");
 			result = null;
 		}else{
 			result = rs.getString("content");
@@ -106,7 +107,7 @@ public class Commit {
 				+ this.id + " order by commit_id desc limit 1");
 		String result;
 		if (!rs.next()) {
-			logger.config("No content for previous version of " + fileID
+			logger.warning("No content for previous version of " + fileID
 					+ " at commit_id " + id + " found");
 			result = null;
 		}else{

@@ -21,7 +21,7 @@ public class MyLogger {
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			logger.setLevel(Level.CONFIG);
+			logger.setLevel(Level.WARNING);
 		}
 		return logger;
 	}

@@ -1,8 +1,16 @@
 import java.io.*;
 import java.sql.*;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.logging.Logger;
 
 import org.evolizer.changedistiller.model.classifiers.ChangeType;
+
+/**
+ * Depends on CVSAnalY extensions:
+ * 'BugFixMessage','Patches','Hunks','HunkBlame','FileTypes','Content', 'CommitsLOC'
+ *
+ */
 
 public class Extractor {
 
@@ -17,23 +25,11 @@ public class Extractor {
 	 */
 	public static void main(String[] args) throws Exception{
 		Connection conn = DatabaseManager.getConnection();
-		Statement stmt = conn.createStatement();
-
+		Statement stmt;
 		
 		Properties prop = new Properties();
 		prop.load(new FileInputStream("config.properties"));
 		String repoID=prop.getProperty("RepositoryID");
-		
-		// Getting all bug commits
-		Set<Integer> bugCommits = new TreeSet<Integer>();
-		ResultSet bugCommitRS = stmt.executeQuery("select distinct bug_commit_id from" +
-				" hunk_blames "+
-				"where bug_commit_id in " +
-				"(select id from scmlog where repository_id in("+repoID+"))");
-		while(bugCommitRS.next()){
-			bugCommits.add(bugCommitRS.getInt("bug_commit_id"));
-		}
-		stmt.close();
 		
 		String dataFile = prop.getProperty("DataFile");
 		if(dataFile == null)
@@ -42,13 +38,19 @@ public class Extractor {
 		
 		// Fetching commit data
 		stmt = conn.createStatement();
-		ResultSet commitRS = stmt.executeQuery("select s.id as commit_id, length(message) as log_length "
+		ResultSet commitRS = stmt.executeQuery("select s.id as commit_id, author_id, author_date, rev, length(message) as log_length "
 				+ "from scmlog s"+
-						" where s.repository_id in("+repoID+")");
+						" where s.repository_id in("+repoID+") order by author_date");
+		int cumulative_change_count = 0;
+		int cumulative_bug_count = 0;
+		int new_rev_loc = 0;
 		while (commitRS.next()) {
-			Commit commit = new Commit(commitRS.getInt("commit_id"));
-			// Generating ASF diff data and content term frequency
+			cumulative_change_count++;
+			int commitID = commitRS.getInt("commit_id");
+			Commit commit = new Commit(commitID);
 			BagOfWords contentBOW = new BagOfWords("new_source");
+			BagOfWords aDeltaBOW = new BagOfWords("added_delta"), dDeltaBOW = new BagOfWords("deleted_delta");
+			
 			Statement stmt1 = conn.createStatement();
 			ResultSet file = stmt1
 					.executeQuery("select * " +
@@ -56,6 +58,7 @@ public class Extractor {
 							"where commit_id="+commit.getID() +
 							" and f.file_name like '%.java'");
 			while (file.next()) {
+				// Generate ASF diff data
 				char action_type = file.getString("action_type").charAt(0);
 				int fileID = file.getInt("file_id");
 				switch (action_type) {
@@ -65,54 +68,65 @@ public class Extractor {
 				case 'A': commit.processAdd(fileID); break;
 				case 'V': commit.processRename(fileID);break;
 				}
+				
+				// Generate BOW+ features
 				String content = commit.getNewContent(fileID);
-				if(content != null)
+				if(content != null){
 					contentBOW.add(content);
-			}
-			stmt1.close();
-
-			//Getting source code delta
-			stmt1 = conn.createStatement();
-			ResultSet rs = stmt1.executeQuery("select patch from patches where commit_id="+commit.getID());
-			rs.next();
-			String patch = rs.getString(1);
-			String addedDelta = extractDelta(patch, '+');
-			String deletedDelta = extractDelta(patch, '-');
-			
-			BagOfWords aDeltaBOW = new BagOfWords("added_delta"), dDeltaBOW = new BagOfWords("deleted_delta");
-			aDeltaBOW.add(addedDelta);
-			dDeltaBOW.add(deletedDelta);
-			stmt1.close();
-			
-			// Getting commit meta data
-			stmt1 = conn.createStatement();
-			ResultSet hunk = stmt1.executeQuery("select old_start_line, old_end_line, new_start_line, new_end_line" +
-					" from hunks where commit_id="+commit.getID());
-			int changedLOC=0;
-			while(hunk.next()){
-				int oldStartLine = hunk.getInt("old_start_line");
-				int oldEndLine = hunk.getInt("old_end_line");
-				if(oldEndLine>oldStartLine){
-					changedLOC += oldEndLine-oldStartLine;
+					new_rev_loc += content.split("\n").length;
 				}
 				
-				int newStartLine = hunk.getInt("new_start_line");
-				int newEndLine = hunk.getInt("new_end_line");
-				if(newEndLine > newStartLine){
-					changedLOC += newEndLine - newStartLine;
+				Statement stmt2 = conn.createStatement();
+				ResultSet rs = stmt2.executeQuery("select patch from patches " +
+						"where commit_id="+commit.getID()+" and file_id="+fileID);
+				if(rs.next()){
+					String patch = rs.getString(1);
+					String addedDelta = extractDelta(patch, '+');
+					String deletedDelta = extractDelta(patch, '-');
+					
+					aDeltaBOW.add(addedDelta);
+					dDeltaBOW.add(deletedDelta);
+				}else{
+					if(action_type != 'V'){
+						Logger logger = MyLogger.getLogger();
+						logger.warning("Patch for file "+fileID+" at commit "+
+								commit.getID()+" not found, actioin type: "+action_type);					
+					}
 				}
+				stmt2.close();
 			}
+
+			// Getting commit meta data
+			ResultSet lines = stmt1.executeQuery("select added, removed" +
+					" from commits_lines where commit_id="+commit.getID());
+			lines.next();
+			int changedLOC = lines.getInt("added");
+			changedLOC += lines.getInt("removed");
 			stmt1.close();
 			// Constructing commit instance
 			StringBuilder line = new StringBuilder();
-			if(bugCommits.contains(commit.getID()))
+			Set<String> fixRevs = getFixeRevs(commit.getID());
+			if(fixRevs.size()>0){
 				line.append(1);
+				cumulative_bug_count++;
+			}
 			else
 				line.append(0);
 			Map<Integer, Integer> features = new TreeMap<Integer, Integer>();
 			features.put(getIndex("files_copied"), commit.getFilesCopied());
 			features.put(getIndex("log_length"), commitRS.getInt("log_length"));
 			features.put(getIndex("changed_LOC"), changedLOC);
+			features.put(getIndex("new_rev_loc"), new_rev_loc);
+			Timestamp date = commitRS.getTimestamp("author_date");
+			Calendar cal = Calendar.getInstance();
+			cal.setTime(date);
+			int hour = cal.get(Calendar.HOUR_OF_DAY);
+			int day = cal.get(Calendar.DAY_OF_WEEK);
+			features.put(getIndex("commit_hour#"+hour), 1);
+			features.put(getIndex("commit_day#"+day), 1);
+			features.put(getIndex("author#"+commitRS.getInt("author_id")), 1);
+			features.put(getIndex("cumulative_change_count"), cumulative_change_count);
+			features.put(getIndex("cumulative_bug_count"), cumulative_bug_count);
 			
 			Map<String, Integer> termFreq = contentBOW.getTermFreq();
 			termFreq.putAll(aDeltaBOW.getTermFreq());
@@ -124,9 +138,8 @@ public class Extractor {
 			for(ChangeType ct:ChangeType.values()){
 				String category = ct.toString();
 				Integer count = commit.categorizedChanges.get(category);
-				if(count == null)
-					count = 0;
-				features.put(getIndex(category), count);
+				if(count != null)
+					features.put(getIndex(category), count);
 			}
 			// Sort the indices
 			SortedSet<Integer> indices = new TreeSet<Integer>(features.keySet());
@@ -137,6 +150,24 @@ public class Extractor {
 				line.append(':');
 				line.append(features.get(i));
 			}
+			
+			// Add comment
+			line.append(" # ");
+			for(String rev : fixRevs){
+				line.append("<fix>");
+				line.append(rev);
+				line.append("</fix>");
+			}
+			
+			line.append("<rev>");
+			line.append(commitRS.getString("rev"));
+			line.append("</rev>");
+			
+			line.append("<author_date>");
+			SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HHmm");
+			line.append(formatter.format(date));
+			line.append("</author_date>");
+			
 			line.append('\n');
 			fWriter.write(line.toString());
 		}
@@ -150,6 +181,22 @@ public class Extractor {
 		fWriter.close();
 		conn.close();
 
+	}
+	
+	public static Set<String> getFixeRevs(int bug_commit_id) throws SQLException{
+		Set<String> revs = new TreeSet<String>();
+		Connection conn = DatabaseManager.getConnection();
+		Statement stmt = conn.createStatement();
+		ResultSet rs = stmt.executeQuery("select rev, is_bug_fix " +
+				"from scmlog c join hunks h on c.id=h.commit_id join hunk_blames hb on h.id=hb.hunk_id " +
+				"where bug_commit_id="+bug_commit_id);
+		while(rs.next()){
+			if(rs.getBoolean("is_bug_fix")){
+				revs.add(rs.getString("rev"));
+			}
+		}
+		stmt.close();
+		return revs;
 	}
 	
 	public static String extractDelta(String patch, char sign) {
