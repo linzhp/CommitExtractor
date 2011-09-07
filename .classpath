@@ -21,8 +21,8 @@
 	<classpathentry kind="lib" path="lib/commons-lang-2.4.jar"/>
 	<classpathentry kind="lib" path="lib/org.eclipse.core.jobs_3.5.1.R36x_v20100824.jar"/>
 	<classpathentry kind="lib" path="lib/ejb3-persistence.jar"/>
+	<classpathentry kind="lib" path="lib/mysql-connector-java-5.1.17-bin.jar"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/changedistiller"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
-	<classpathentry kind="lib" path="lib/mysql-connector-java-3.1.14-bin.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
