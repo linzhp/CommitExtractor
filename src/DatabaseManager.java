@@ -12,7 +12,7 @@ import java.util.Properties;
 public class DatabaseManager {
 
     private static DatabaseManager dbManager;
-    private String drivername, databasename, username, password;
+    private String databasename, username, password;
     private Connection conn = null;
     Statement stmt;
 
@@ -24,7 +24,6 @@ public class DatabaseManager {
             Properties prop = new Properties();
             prop.load(fis);
             //Enumeration enums = prop.propertyNames(); 
-            drivername = (String) prop.get("Driver");
             databasename = (String) prop.get("URL");
             username = (String) prop.get("UserName");
             password = (String) prop.get("UserPass");
@@ -43,7 +42,6 @@ public class DatabaseManager {
         }
 
         try {
-            Class.forName(drivername).newInstance();
             conn = DriverManager
                     .getConnection(databasename, username, password);
             stmt = conn.createStatement();

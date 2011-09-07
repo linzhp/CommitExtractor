@@ -1,4 +1,3 @@
-Driver:com.mysql.jdbc.Driver
 URL:jdbc:mysql://localhost:3306/cvsanaly
 UserName:root
 UserPass:
