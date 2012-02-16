@@ -17,11 +17,7 @@ public class Extractor {
 	private static Map<String, Integer> attrIndex;
 
 	/**
-	 * @param args
-	 * @throws ClassNotFoundException
-	 * @throws IllegalAccessException
-	 * @throws InstantiationException
-	 * @throws SQLException
+	 * @param args args[0] is the number of revisions to generate feature vocabulary
 	 */
 	public static void main(String[] args) throws Exception{
 		Connection conn = DatabaseManager.getConnection();
@@ -113,33 +109,40 @@ public class Extractor {
 			else
 				line.append(0);
 			Map<Integer, Integer> features = new TreeMap<Integer, Integer>();
-			features.put(getIndex("files_copied"), commit.getFilesCopied());
-			features.put(getIndex("log_length"), commitRS.getInt("log_length"));
-			features.put(getIndex("changed_LOC"), changedLOC);
-			features.put(getIndex("new_rev_loc"), new_rev_loc);
+			features.put(getOrCreateIndex("files_copied"), commit.getFilesCopied());
+			features.put(getOrCreateIndex("log_length"), commitRS.getInt("log_length"));
+			features.put(getOrCreateIndex("changed_LOC"), changedLOC);
+			features.put(getOrCreateIndex("new_rev_loc"), new_rev_loc);
 			Timestamp date = commitRS.getTimestamp("author_date");
 			Calendar cal = Calendar.getInstance();
 			cal.setTime(date);
 			int hour = cal.get(Calendar.HOUR_OF_DAY);
 			int day = cal.get(Calendar.DAY_OF_WEEK);
-			features.put(getIndex("commit_hour#"+hour), 1);
-			features.put(getIndex("commit_day#"+day), 1);
-			features.put(getIndex("author#"+commitRS.getInt("author_id")), 1);
-			features.put(getIndex("cumulative_change_count"), cumulative_change_count);
-			features.put(getIndex("cumulative_bug_count"), cumulative_bug_count);
+			features.put(getOrCreateIndex("commit_hour#"+hour), 1);
+			features.put(getOrCreateIndex("commit_day#"+day), 1);
+			features.put(getOrCreateIndex("author#"+commitRS.getInt("author_id")), 1);
+			features.put(getOrCreateIndex("cumulative_change_count"), cumulative_change_count);
+			features.put(getOrCreateIndex("cumulative_bug_count"), cumulative_bug_count);
 			
 			Map<String, Integer> termFreq = contentBOW.getTermFreq();
 			termFreq.putAll(aDeltaBOW.getTermFreq());
 			termFreq.putAll(dDeltaBOW.getTermFreq());
 			for(String term : termFreq.keySet()){
-				features.put(getIndex(term), termFreq.get(term));
+				Integer freq = termFreq.get(term);
+				if(cumulative_change_count <= Integer.valueOf(args[0])) {
+					features.put(getOrCreateIndex(term), freq);
+				} else{
+					Integer index = getIndex(term);
+					if(index != null)
+						features.put(index, freq);
+				}
 			}
 			
 			for(ChangeType ct:ChangeType.values()){
 				String category = ct.toString();
 				Integer count = commit.categorizedChanges.get(category);
 				if(count != null)
-					features.put(getIndex(category), count);
+					features.put(getOrCreateIndex(category), count);
 			}
 			// Sort the indices
 			SortedSet<Integer> indices = new TreeSet<Integer>(features.keySet());
@@ -212,11 +215,11 @@ public class Extractor {
 		return delta.toString();
 	}
 	
-	public static int getIndex(String attributeName){
+	public static int getOrCreateIndex(String attributeName){
 		if(attrIndex == null){
 			attrIndex = new TreeMap<String, Integer>();
 		}
-		Integer index = attrIndex.get(attributeName);
+		Integer index = getIndex(attributeName);
 		if(index == null){
 			index = attrIndex.size()+1;
 			attrIndex.put(attributeName, index);
@@ -224,4 +227,7 @@ public class Extractor {
 		return index;
 	}
 	
+	public static Integer getIndex(String attrName) {
+		return attrIndex.get(attrName);
+	}
 }
