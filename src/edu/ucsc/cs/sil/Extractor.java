@@ -1,3 +1,4 @@
+package edu.ucsc.cs.sil;
 import java.io.*;
 import java.sql.*;
 import java.text.SimpleDateFormat;
@@ -5,6 +6,8 @@ import java.util.*;
 import java.util.logging.Logger;
 
 import org.evolizer.changedistiller.model.classifiers.ChangeType;
+
+import edu.ucsc.cs.sil.bow.BagOfWordsPlus;
 
 /**
  * Depends on CVSAnalY extensions:
@@ -44,8 +47,8 @@ public class Extractor {
 			cumulative_change_count++;
 			int commitID = commitRS.getInt("commit_id");
 			Commit commit = new Commit(commitID);
-			BagOfWords contentBOW = new BagOfWords("new_source");
-			BagOfWords aDeltaBOW = new BagOfWords("added_delta"), dDeltaBOW = new BagOfWords("deleted_delta");
+			BagOfWordsPlus contentBOW = new BagOfWordsPlus("new_source");
+			BagOfWordsPlus aDeltaBOW = new BagOfWordsPlus("added_delta"), dDeltaBOW = new BagOfWordsPlus("deleted_delta");
 			
 			Statement stmt1 = conn.createStatement();
 			ResultSet file = stmt1

@@ -1,3 +1,4 @@
+package edu.ucsc.cs.sil;
 import static org.junit.Assert.*;
 
 import org.junit.Test;
