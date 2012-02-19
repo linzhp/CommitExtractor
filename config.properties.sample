@@ -4,3 +4,4 @@ UserPass:
 RepositoryID: 1,2
 DataFile: lucene.libsvm
 IndexMappingFile: lucene.idx 
+VocabularyRev: 500
