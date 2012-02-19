@@ -17,6 +17,11 @@ public class BagOfWordsPlusPlusTest {
 		assertEquals("extractor", token.get(1));
 		assertEquals("test", token.get(2));
 		assertEquals("test", token.get(13));
+		
+		token = bow.tokenize(".settings/.api_filters");
+		assertEquals("settings", token.get(0));
+		assertEquals("api", token.get(1));
+		assertEquals("filters", token.get(2));
 	}
 
 }
