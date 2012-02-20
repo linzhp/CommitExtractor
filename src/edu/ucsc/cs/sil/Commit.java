@@ -19,7 +19,7 @@ public class Commit {
 
 	public Commit(int commitID) {
 		this.id = commitID;
-		logger = MyLogger.getLogger();
+		logger = MyLogger.getLogger("Commit"+commitID);
 	}
 
 	public int getFilesCopied() {

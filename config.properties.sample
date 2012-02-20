@@ -2,6 +2,5 @@ URL:jdbc:mysql://localhost:3306/cvsanaly
 UserName:root
 UserPass:
 RepositoryID: 1,2
-DataFile: lucene.libsvm
-IndexMappingFile: lucene.idx 
+OutputFile: lucene
 VocabularyRev: 500

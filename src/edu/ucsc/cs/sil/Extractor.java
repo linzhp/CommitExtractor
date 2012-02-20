@@ -22,6 +22,7 @@ import edu.ucsc.cs.sil.bow.BagOfWordsPlusPlus;
 public class Extractor {
 
 	private static Map<String, Integer> attrIndex;
+	private static Logger logger;
 
 	/**
 	 * @param args
@@ -39,10 +40,11 @@ public class Extractor {
 		}
 		String repoID = prop.getProperty("RepositoryID");
 
-		String dataFile = prop.getProperty("DataFile");
-		if (dataFile == null)
-			dataFile = "output.libsvm";
-		FileWriter fWriter = new FileWriter(dataFile, false);
+		String outputFile = prop.getProperty("OutputFile");
+		if (outputFile == null)
+			outputFile = "output";
+		FileWriter fWriter = new FileWriter(outputFile + ".libsvm", false);
+		logger = MyLogger.getLogger(outputFile);
 
 		// Fetching commit data
 		stmt = conn.createStatement();
@@ -173,10 +175,7 @@ public class Extractor {
 		}
 		fWriter.close();
 		// Log attribute indices
-		String idxFile = prop.getProperty("IndexMappingFile");
-		if (idxFile == null)
-			idxFile = "attr.idx";
-		fWriter = new FileWriter(idxFile);
+		fWriter = new FileWriter(outputFile + ".idx");
 		fWriter.write(attrIndex.toString());
 		fWriter.close();
 		conn.close();
@@ -209,7 +208,6 @@ public class Extractor {
 		} else {
 			char actionType = file.getString("type").charAt(0);
 			if (actionType != 'V') {
-				Logger logger = MyLogger.getLogger();
 				logger.warning("Patch for file " + fileID + " at commit "
 						+ commit.getID() + " not found, action type: "
 						+ actionType);
